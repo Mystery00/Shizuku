@@ -17,6 +17,16 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        maven {
+            url("https://maven.pkg.github.com/Mystery00/HiddenApi")
+            content {
+                includeGroup("dev.rikka.hidden")
+            }
+            credentials {
+                setUsername(System.getenv("NEXUS_USER"))
+                setPassword(System.getenv("NEXUS_PASSWORD"))
+            }
+        }
         google()
         mavenCentral()
         mavenLocal()
