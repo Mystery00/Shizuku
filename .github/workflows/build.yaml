@@ -1,0 +1,79 @@
+name: Build App
+on:
+  push:
+    branches: [ master ]
+    paths-ignore:
+      - '.github/ISSUE_TEMPLATE'
+env:
+  OUTPUT_DIR: "manager/build/outputs/apk/release"
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Write key
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        run: |
+          touch signing.properties
+          echo KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} >> signing.properties
+          echo KEYSTORE_ALIAS=${{ secrets.KEYSTORE_ALIAS }} >> signing.properties
+          echo KEYSTORE_ALIAS_PASSWORD='${{ secrets.KEYSTORE_ALIAS_PASSWORD }}' >> signing.properties
+          echo KEYSTORE_FILE=../key.jks >> signing.properties
+          echo ${{ secrets.KEYSTORE }} | base64 --decode > key.jks
+      - name: Write temporary key
+        if: hashFiles('key.jks') == '' && !steps.vars.outputs.HAS_SECRET
+        run: |
+          keytool -genkey -alias a -dname CN=_ -storepass passwd -keypass passwd -keystore key.jks
+          echo KEYSTORE_PASSWORD=passwd >> signing.properties
+          echo KEYSTORE_ALIAS=a >> signing.properties
+          echo KEYSTORE_ALIAS_PASSWORD=passwd >> signing.properties
+          echo KEYSTORE_FILE=../key.jks >> signing.properties
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-disabled: true
+      - name: Build with Gradle
+        id: buildWithGradle
+        run: |
+          echo 'org.gradle.caching=true' >> gradle.properties
+          echo 'org.gradle.parallel=true' >> gradle.properties
+          echo 'org.gradle.vfs.watch=true' >> gradle.properties
+          echo 'org.gradle.jvmargs=-Xmx2048m' >> gradle.properties
+          ./gradlew :manager:assembleRelease
+          releaseName=`ls manager/build/outputs/apk/release/shizuku*-v*-release.apk | awk -F '(/|.apk)' '{print $6}'` && echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
+      - name: Upload release
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.buildWithGradle.outputs.releaseName }}
+          path: "manager/build/outputs/apk/release/*.apk"
+      - name: Upload mappings
+        uses: actions/upload-artifact@v4
+        with:
+          name: mappings
+          path: "manager/build/outputs/mapping/release"
+      - name: parse apk info
+        id: apk
+        run: |
+          versionName=$(cat "${{ env.OUTPUT_DIR }}/output-metadata.json" | jq -r '.elements[0].versionName')
+          versionCode=$(cat "${{ env.OUTPUT_DIR }}/output-metadata.json" | jq -r '.elements[0].versionCode')
+          apkFile=$(cat "${{ env.OUTPUT_DIR }}/output-metadata.json" | jq -r '.elements[0].outputFile')
+          cp "${{ env.OUTPUT_DIR }}/$apkFile" "${{ env.OUTPUT_DIR }}/Shizuku-$versionName.apk"
+          echo ::set-output name=versionName::$versionName
+          echo ::set-output name=versionCode::$versionCode
+      - name: publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.apk.outputs.versionName }}
+          prerelease: true
+          files: |
+            ${{ env.OUTPUT_DIR }}/Shizuku-${{ steps.apk.outputs.versionName }}.apk
