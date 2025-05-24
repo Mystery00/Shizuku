@@ -6,6 +6,8 @@ on:
       - '.github/ISSUE_TEMPLATE'
 env:
   OUTPUT_DIR: "manager/build/outputs/apk/release"
+  NEXUS_USER: ${{ secrets.NEXUS_USER }}
+  NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 jobs:
   build:
     runs-on: ubuntu-latest
