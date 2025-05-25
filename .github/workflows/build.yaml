@@ -4,6 +4,7 @@ on:
     branches: [ master ]
     paths-ignore:
       - '.github/ISSUE_TEMPLATE'
+  workflow_dispatch:
 env:
   OUTPUT_DIR: "manager/build/outputs/apk/release"
   NEXUS_USER: ${{ secrets.NEXUS_USER }}
